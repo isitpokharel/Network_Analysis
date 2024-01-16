@@ -1,0 +1,756 @@
+---
+title: "Network Analysis"
+author: "Isit Pokharel"
+output:
+  html_document:
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.width = 10, fig.height=10,warning = FALSE, message = FALSE, echo = TRUE)
+```
+
+
+```{r}
+rm(list=ls())
+library(igraph) 
+library(igraphdata) 
+library(dplyr)
+library(tidyverse)
+data(karate) 
+```
+## Introduction
+
+In this project, I’ve used the karate dataset available in the igraphdata package in R to perform social network analysis.
+
+Dataset Description:
+
+```{r}
+karate_data <- karate
+# compare layout effects
+lkk<-layout_with_kk(karate_data)
+ldrl<-layout_with_drl(karate_data)
+summary(karate_data)
+```
+
+
+
+Zachary’s karate club dataset is a network data representing the social network between members of a karate club in the university. It is a undirected network data with 34 vertices and 78 edges. There are two factions within the club, one is led by John A and the other one by Mr. Hi. The karate club later splits into two separate clubs with John A. and Mr Hi leading one of each. All members choose their new club based on their respective faction in the original club except for Actor 9 who belonged to the faction of John A but decided to move to Mr Hi’s club. 
+
+Each vertex represent the member of the initial club with the following attributes: name ( name of the member), label ( label of the member, a shortened form of the name vertex attribute), Faction ( faction membership of the actors, 1 represents Mr Hi’s faction and 2 represents John A’s faction). 
+
+The edges have only one attribute - weight. Weight represents the number of common activities the club members took part in. 
+
+1. Association in and between academic classes at the university. 
+2. Membership in Mr. Hi’s private karate studio on the east side of the city where Mr. Hi taught nights as a part-time instructor. 
+3. Membership in Mr. Hi’s private karate studio on the east side of the city, where many of his supporters worked out on weekends.
+4. Student teaching at the east-side karate studio referred to in (2). This is different from (2) in that student teachers interacted with each other, but    were prohibited from interacting with their students. 
+5. Interaction at the university rathskeller, located in the same basement as the karate club’s workout area. 
+6. Interaction at a student-oriented bar located across the street from the university campus. 
+7. Attendance at open karate tournaments held through the area at private karate studios. 
+8. Attendance at intercollegiate karate tournaments held at local universities. Since both open and intercollegiate tournaments were held on Saturdays, attendance at both was impossible. CRAN (2022, October 13)
+
+
+
+
+
+
+## Methods
+
+For this report, the two main R libraries that I have used are ggplot and igraph. Igraph is mostly used to graph the network data and ggplot is used to plot network statistics of the Zachary’s karate club dataset from the igraphdata library. I'll be creating various network plots using the igraph library and using different vertex, edge attributes to highlight the nature of connection between the nodes in this dataset. 
+
+
+
+
+
+## Results
+
+
+
+```{r}
+
+### Plotting the network based on importance of club members. 
+bet_mes <- betweenness(karate_data, directed = FALSE)
+clo_mes <- closeness(karate_data, mode = "all")
+deg_mes <- degree(karate_data, mode = "all")
+esize<- eigen_centrality(karate_data, directed = FALSE)
+V(karate_data)$shape <- ifelse(V(karate_data)$name == "John A", "square" ,
+                          ifelse(V(karate_data)$name=="Mr Hi", "square" , "circle"))
+V(karate_data)$faction_shape <- ifelse(V(karate_data)$Faction == 1, "square", "circle")
+
+
+E(karate_data)$color <- "gray"
+
+karate_data_diameter <- get_diameter(karate_data)
+
+#E(karate_data, path = karate_data_diameter)$color <- "red"
+
+set.seed(40)
+plot(karate_data,
+     vertex.label = V(karate_data)$label,
+     edge.width =  E(karate_data)$weight,
+     layout = layout_with_fr(karate_data),
+     vertex.size = deg_mes,
+     # label distance = .5 if team leaders, if not then label distance = .5
+     vertex.label.dist = ifelse(V(karate_data)$name == "John A", 0 ,
+                                ifelse(V(karate_data)$name=="Mr Hi", 0 , .5)),
+    vertex.shape = ifelse(V(karate_data)$name == "John A", "square" ,
+                          ifelse(V(karate_data)$name=="Mr Hi", "square" , "circle")),
+     vertex.label.color = c("black"),
+     vertex.label.font= 1, # 2 is bold
+     edge.curved=.1,
+     alpha.f = .5,
+     main="Full Network of Zachary Karate Club ( Vertex size dependent on degree) "
+)
+legend("bottomright", 
+       legend = c("Mr.Hi's Faction", "John A's Faction"), 
+       col = c("#E69F00", "#56B4E9"),
+       pch = c(19,19), 
+       bty = "n", 
+       text.col = "black")
+
+
+
+```
+
+```{r}
+hi_faction <- sum(V(karate_data)$Faction == 1)
+john_faction <- sum(V(karate_data)$Faction == 2)
+
+print(paste("There are", hi_faction, "number of members in Mr Hi's faction"))
+print(paste("There are", john_faction, "number of members in John A's faction"))
+
+
+```
+
+
+In the network graph above, i've shown the full network of zachary's club dataset. Blue vertices represents the members of John A's faction, and Orange vertices represent the member of Mr Hi's faction. There are 16 members in Mr Hi's faction including Mr Hi and there are 18 members in John A's faction including John A. 
+
+In the plot about vertex sizes are based on degree centrality measure. Degree centrality measure is one of the measures of the relative importance of a particular node in the network and it represents how my edges a particular node has in the network i.e. how many other nodes is the particular node is connected to directly. Nodes with high degree centrality are considered important because they have a wide reach and potential influence in the network.  In the plot above we can see that Mr Hi and John A are the two most connected nodes in terms and it is reflected in the size of their vertex in the plot above. Both factions seem to have proportional number of nodes with high and low degree centrality.
+
+The grey edges in the graph have their width dependent on edge attribute weight i.e. the higher the weight the thicker the edge width. In the barplot below I've shown the top 10 edges with highest weight values. 
+
+```{r fig.width = 8 , fig.height= 5 }
+edge_df <- get.data.frame(karate_data, what = "edges")
+sorted_df <- edge_df[order(edge_df$weight, decreasing = TRUE), ]
+sorted_df$path <- paste(sorted_df$from, sorted_df$to, sep = " and ")
+top_edges_df <- sorted_df[1:10, ]
+
+plot5 <- ggplot(head(top_edges_df[order(-top_edges_df$weight), ], 10), 
+                aes(reorder(path, weight),weight)) + 
+  geom_bar(stat="summary",alpha=.5, fill = 'cornflowerblue') +
+  geom_text(aes(label = weight), position = position_stack(vjust = 0.5), color = "black", size = 4) +
+  ggtitle("Edge Attribute: Weight")+
+  theme_minimal()+xlab("Undirected Edge")+ylab("Weight")+
+  theme(axis.text.x = element_text(angle = 90, size = 12),
+        axis.text.y = element_text(size = 12),
+        axis.title.x = element_text(size = 14),
+        axis.title.y = element_text(size = 14)
+        ) + 
+  coord_flip()
+plot5
+```
+
+
+Similar to degree, there are other measures that reflect the relative importance of nodes in the network. 
+
+Betweenness Centrality:
+Betweenness centrality is a measure that quantifies the extent to which a node lies on the shortest paths between other nodes in a network. Nodes with high betweenness centrality act as bridges or intermediaries between different parts of the network. They play a crucial role in facilitating the flow of information or resources between disparate groups of nodes. By identifying nodes with high betweenness centrality, we can gain insights into the nodes that have significant influence or control over the flow of information in the network.
+
+
+Eigenvector Centrality:
+Eigenvector centrality is a measure that reflects the influence of a node in a network, taking into account both the number of connections it has and the centrality of its neighbors. Nodes with high eigenvector centrality are connected to other highly central nodes, which enhances their own centrality. Eigenvector centrality helps identify nodes that are influential or well-connected to influential nodes in the network. It considers the quality of a node's connections, rather than just the quantity. This measure allows us to identify nodes with indirect but powerful influence within a network.
+
+Closeness Centrality:
+Closeness centrality is a measure that quantifies how quickly a node can reach other nodes in a network. It measures the proximity or accessibility of a node to the rest of the network. Nodes with high closeness centrality can access information or resources from other nodes more efficiently. Closeness centrality helps identify nodes that are strategically positioned to disseminate or receive information quickly. By understanding the closeness centrality of nodes, we can assess the efficiency and effectiveness of information flow within a network.
+
+In the plots below, I've plotted the Zachary dataset where vertex sizes are dependent on betweenness centrality and eigenvector centrality. 
+
+
+```{r}
+
+par(mfrow=c(1,1), mar=c(1,1,1,1))
+set.seed(40)
+E(karate_data, path = karate_data_diameter)$color <- "gray"
+
+plot(karate_data,
+     vertex.label = V(karate_data)$label,
+     edge.width =  E(karate_data)$weight,
+     #layout = layout_with_drl(karate_data),
+     layout = layout_with_fr(karate_data),
+     vertex.size = sqrt(bet_mes)*1.5,
+     # label distance = .5 if team leaders, if not then label distance = .5
+     vertex.label.dist = ifelse(V(karate_data)$name == "John A", 0 ,
+                                ifelse(V(karate_data)$name=="Mr Hi", 0 , .5)),
+     vertex.label.color = c("black"),
+     vertex.label.font= 1, # 2 is bold
+     edge.curved=.1,
+     alpha.f = .5,
+     main="Vertex size (Betweenness)"
+)
+legend("bottomright", 
+       legend = c("Mr.Hi's Team", "John A's Team"), 
+       col = c("#E69F00", "#56B4E9"),
+       pch = c(19,19), 
+       bty = "n", 
+       text.col = "black")
+set.seed(33)
+par(mfrow=c(1,1), mar=c(0.5,0.5,0.5,0.5)) # reset the graph params
+
+
+```
+
+In the plot above, we can see that vertices like 20, 32, 25 and 20 have higher centrality if we use betweeness centrality measure. These nodes/vertices play important part in flow of information in the network. if you look at the size of these same vertices in the first chart where vertex size are dependent on degrees, they don't seem to be important vertices based on their size. Different measures of centrality provide different ways in which we can perceive importance of nodes in the network. Nodes like 20, 32, 25 and 20 have high betweenness centrality because it is a measure that quantifies the extent to which a node lies on the shortest paths between other nodes in a network. Nodes with high betweenness centrality act as bridges or intermediaries between different parts of the network.
+
+
+```{r}
+par(mfrow=c(1,1), mar=c(1,1,1,1))
+#set.seed(40)
+E(karate_data, path = karate_data_diameter)$color <- "gray"
+
+# plot(karate_data,
+#      vertex.label = V(karate_data)$label,
+#      #edge.width =  E(karate_data)$weight*1.5,
+#      #layout = layout_with_drl(karate_data),
+#      layout = layout_with_fr(karate_data),
+#      vertex.size = deg_mes/2,
+#      # label distance = .5 if team leaders, if not then label distance = .5
+#      vertex.label.dist = ifelse(V(karate_data)$name == "John A", 0 ,
+#                                 ifelse(V(karate_data)$name=="Mr Hi", 0 , .5)),
+#      vertex.label.color = c("black"),
+#      vertex.label.font= 1, # 2 is bold
+#      edge.curved=.1,
+#      alpha.f = .5,
+#      main="Vertex Importance (Degree)"
+# )
+# legend("bottomright", 
+#        legend = c("Mr.Hi's Team", "John A's Team"), 
+#        col = c("#E69F00", "#56B4E9"),
+#        pch = c(19,19), 
+#        bty = "n", 
+#        text.col = "black")
+set.seed(40)
+plot(karate_data,
+     vertex.label = V(karate_data)$label,
+     layout = layout_with_fr(karate_data),
+     edge.width =  E(karate_data)$weight,
+     vertex.size = esize$vector*10,
+     # label distance = .5 if team leaders, if not then label distance = .5
+     vertex.label.dist = ifelse(V(karate_data)$name == "John A", 0 ,
+                                ifelse(V(karate_data)$name=="Mr Hi", 0 , .8)),
+     vertex.label.color = c("black"),
+     vertex.label.font= 1, # 2 is bold
+     edge.curved=.1,
+     alpha.f = .5,
+     main="Vertex Size (Eigen Centrality)"
+)
+legend("bottomright", 
+       legend = c("Mr.Hi's Faction", "John A's Faction"), 
+       col = c("#E69F00", "#56B4E9"),
+       pch = c(19,19), 
+       bty = "n", 
+       text.col = "black")
+par(mfrow=c(1,1), mar=c(0.5,0.5,0.5,0.5)) # reset the graph params
+
+
+```
+
+In the plot above, we can see that a lot of vertices seem to have high importance in network compared to previous network graphs where vertex sizes were dependent on degree and betweeness. In addition, it looks like difference between size of vertices representing Mr Hi and John A, and other vertices has gone down. Vertex 3 and 33 seems to be as important as vertices representing Mr Hi and John A based on eigen vector centrality. The importance of nodes like 3,24,32,9,13,2 among others in the graph above is because eigen centrality measure allows us to identify nodes with indirect but powerful influence within a network by taking into account both the number of connections it has and the centrality of its neighbors. Nodes with high eigenvector centrality are connected to other highly central nodes, which enhances their own centrality.
+
+In the chart below, I've shown top 10 vertices based on different measures of centrality. We can see from the plot that eigen vector centrality and closeness centrality measure have the least range in centrality measure among top 10 vertices. 
+
+```{r}
+
+library(ggplot2)
+library(GGally)
+library(gridExtra)
+g_degree <- degree(karate_data)
+g_close <- closeness(karate_data)
+g_faction <- V(karate_data)$Faction
+g_betw <- betweenness(karate_data)
+g_eigen <- eigen_centrality(karate_data)
+
+network_stat <- data.frame(actor = V(karate_data)$name, 
+                           degree = g_degree,
+                           closeness = g_close,
+                           faction = g_faction,
+                           betweenness = g_betw,
+                           eigen_centrality = round(g_eigen$vector,2))
+network_stat$faction <- ifelse(network_stat$faction == 1, "Mr Hi", ifelse(network_stat$faction == 2, "John A", network_stat$faction))
+
+
+plot5 <- ggplot(head(network_stat[order(-network_stat$degree), ], 10), 
+                aes(reorder(actor, -degree), fill = faction,degree)) + 
+  geom_bar(stat="summary",alpha=.5) +
+  geom_text(aes(label = degree), vjust = -0.5, color = "black", size = 4) +
+  ggtitle("Top 10 Vertex based on Degree Centrality")+
+  theme_minimal()+xlab("Faction Member")+ylab("Degree")+
+  theme(axis.text.x = element_text(angle = 45, size = 12),
+        axis.text.y = element_text(size = 12),
+        axis.title.x = element_text(size = 14),
+        axis.title.y = element_text(size = 14)
+        )
+plot6 <- ggplot(head(network_stat[order(-network_stat$betweenness), ], 10), 
+                aes(reorder(actor, -betweenness), fill = faction,betweenness)) + 
+  geom_bar(stat="summary",alpha=.5) +
+  geom_text(aes(label = round(betweenness,2)), position = position_stack(vjust = 0.5), color = "black", size = 4, angle = 90) +
+  ggtitle("Top 10 Vertex based on Betweenness Centrality")+
+  theme_minimal()+xlab("Faction Member")+ylab("betweenness")+
+  theme(axis.text.x = element_text(angle = 45, size = 12),
+        axis.text.y = element_text(size = 12),
+        axis.title.x = element_text(size = 14),
+        axis.title.y = element_text(size = 14)
+        )
+plot7 <- ggplot(head(network_stat[order(-network_stat$eigen_centrality), ], 10), 
+                aes(reorder(actor, -eigen_centrality), fill = faction,eigen_centrality)) + 
+  geom_bar(stat="summary",alpha=.5) +
+  geom_text(aes(label = round(eigen_centrality,2)), position = position_stack(vjust = 0.5), color = "black", size = 4, angle = 90) +
+  ggtitle("Top 10 Vertex based on Eigen Vector centrality")+
+  theme_minimal()+xlab("Faction Member")+ylab("Eigen Vector Centrality")+
+  theme(axis.text.x = element_text(angle = 45, size = 12),
+        axis.text.y = element_text(size = 12),
+        axis.title.x = element_text(size = 14),
+        axis.title.y = element_text(size = 14)
+        )
+plot8 <- ggplot(head(network_stat[order(-network_stat$closeness), ], 10), 
+                aes(reorder(actor, -closeness), fill = faction,closeness)) + 
+  geom_bar(stat="summary",alpha=.5) +
+  geom_text(aes(label = round(closeness,4)), position = position_stack(vjust = 0.5), color = "black", size = 4, angle = 90) +
+  ggtitle("Top 10 Vertex based on Closeness centrality")+
+  theme_minimal()+xlab("Faction Member")+ylab("Closeness")+
+  theme(axis.text.x = element_text(angle = 45, size = 12),
+        axis.text.y = element_text(size = 12),
+        axis.title.x = element_text(size = 14),
+        axis.title.y = element_text(size = 14)
+        )
+grid.arrange(plot5,plot6,plot7,plot8, ncol = 2, nrow = 2)
+
+```
+
+
+```{r}
+
+neighbors_data <- karate_data
+V(neighbors_data)$neighbor_vertex_color <- V(neighbors_data)$color
+
+hi_team <- karate_data - V(karate_data)[V(karate_data)$Faction == 2]
+john_team <- karate_data - V(karate_data)[V(karate_data)$Faction == 1]
+  
+
+inc.edges.hi_team <- incident(hi_team,  V(hi_team)[name = "Mr Hi"], mode="all")
+ecol_hi_team <- rep("gray80", ecount(hi_team))
+ecol_hi_team[inc.edges.hi_team] <- "orange"
+vcol_hi_team <- rep("grey80", vcount(hi_team))
+vcol_hi_team[V(hi_team)[name = "Mr Hi"]] <- "gold"
+neigh.nodes_hi_team <- neighbors(hi_team, V(hi_team)[name == "Mr Hi"], mode="all")
+vcol_hi_team[neigh.nodes_hi_team] <- "#ff9d00"
+
+inc.edges.john_team <- incident(john_team,  V(john_team)[name = "John A"], mode="all")
+ecol_john_team <- rep("gray80", ecount(john_team))
+ecol_john_team[inc.edges.john_team] <- "orange"
+vcol_john_team <- rep("grey80", vcount(john_team))
+vcol_john_team[V(john_team)[name = "John A"]] <- "gold"
+neigh.nodes_john_team <- neighbors(john_team, V(john_team)[name == "John A"], mode="all")
+vcol_john_team[neigh.nodes_john_team] <- "#ff9d00"
+
+
+
+
+
+par(mfrow=c(1,2), mar=c(1,1,1,1))
+set.seed(40)
+plot(hi_team,
+     vertex.label = V(hi_team)$label,
+     #edge.width =  E(hi_team)$weight,
+     edge.width = E(hi_team)$edge_width*1.5,
+     edge.color = ecol_hi_team,
+     layout = layout_with_fr(hi_team),
+     #vertex.size = eigen_centrality(hi_team, directed = FALSE)$vector*15,
+     vertex.size = 12,
+     # label distance = .5 if team leaders, if not then label distance = .5
+     vertex.label.dist = 0,
+     vertex.color = vcol_hi_team,
+     vertex.label.color = c("black"),
+     vertex.label.font= 1, # 2 is bold
+     edge.curved=.1,
+     alpha.f = .5,
+     main="Mr Hi's direct neighbors in his faction"
+)
+set.seed(40)
+plot(john_team,
+     vertex.label = V(john_team)$label,
+     edge.width = E(john_team)$edge_width*1.5,
+     edge.color = ecol_john_team,
+     layout = layout_with_fr(john_team),
+     #vertex.size = eigen_centrality(john_team, directed = FALSE)$vector*15,
+     vertex.size = 12,
+
+     # label distance = .5 if team leaders, if not then label distance = .5
+     vertex.label.dist = 0,
+    vertex.color = vcol_john_team,
+     vertex.label.color = c("black"),
+     vertex.label.font= 1, # 2 is bold
+     edge.curved=.1,
+     alpha.f = .5,
+     main="John A's direct neighbors in his faction"
+)
+
+#legend("bottomright", legend = c(legend_title, legend_labels), col = c("black", legend_colors), pch = 15, bty = "n")
+par(mfrow=c(1,2), mar=c(0.5,0.5,0.5,0.5)) # reset the graph params
+
+```
+The plot above shows two networks - John A's faction and Mr Hi's faction - side by side. These two plots are subsetted network based on vertex attribute Faction. In the plot titled "Mr Hi's direct neighbors in his faction" only vertices with Faction attribute of value 1 are selected, and similarly the plot titled "John A's direct neighbors in his faction" has only vertices with Faction attribute of value 2. In addition, both plots are customized to identify Mr Hi's and John A's direct neighbors. Mr Hi and John A's vertex are represented by square shape with gold color, all other nodes in each subsetted network are represented by circle. Futhermore, circular vertices with orange color are vertices that are direct neighbors of the faction leaders - Mr Hi and John A. We can see from the plot that all actors in Mr Hi's faction are his direct neighbors expect actor 17, and in John A's network, only actor 25 and 26 are not John A's direct neighbors in his faction. Also, in the plot above, edge colors match the vertices representing them i.e edges connecting john A and mr hi to their direct neighbors are of color organge and all other edges are of gray color.  
+
+```{r}
+
+hi_team <- karate_data - V(karate_data)[V(karate_data)$Faction == 2]
+john_team <- karate_data - V(karate_data)[V(karate_data)$Faction == 1]
+
+V(hi_team)$clique_color <- 1 #V(hi_team)$color
+V(john_team)$clique_color <- 1# V(john_team)$color
+
+V(hi_team)$clique_color[unlist(largest_cliques(hi_team)[1])] <- 6
+V(john_team)$clique_color[unlist(largest_cliques(john_team)[1])] <- 6
+
+cut.off_hi_team <- mean(E(karate_data)$weight)
+cut.off_john_team <- mean(E(karate_data)$weight)
+
+E(hi_team)$edge_color <- ifelse(E(hi_team)$weight < cut.off_hi_team, "gray", "green")
+E(hi_team)$edge_width <- ifelse(E(hi_team)$weight < cut.off_hi_team, 1, E(hi_team)$weight)
+
+E(john_team)$edge_color <- ifelse(E(john_team)$weight < cut.off_john_team, "gray", "green")
+E(john_team)$edge_width <- ifelse(E(john_team)$weight < cut.off_john_team, 1, E(john_team)$weight)
+
+
+legend_colors <- c("gray", "green")
+legend_labels <- c("< mean weight", ">= mean weight")
+legend_title <- "Edge Weight"
+
+
+
+par(mfrow=c(1,2), mar=c(1,1,1,1))
+set.seed(40)
+
+plot(hi_team,
+     vertex.color = V(hi_team)$clique_color,
+     vertex.label = V(hi_team)$label,
+     #edge.width =  E(hi_team)$weight,
+     edge.width = E(hi_team)$edge_width,
+     edge.color = E(hi_team)$edge_color,
+     layout = layout_with_fr(hi_team),
+     #vertex.size = eigen_centrality(hi_team, directed = FALSE)$vector*10,
+     vertex.size = 12,
+     # label distance = .5 if team leaders, if not then label distance = .5
+     vertex.label.dist = 0,
+     vertex.label.color = c("black"),
+     vertex.label.font= 1, # 2 is bold
+     edge.curved=.1,
+     alpha.f = .5,
+     main="Mr Hi's Faction (Largest Clique)"
+)
+legend("bottomright", legend = c(legend_title, legend_labels), col = c("black", legend_colors), pch = 15, bty = "n")
+set.seed(40)
+plot(john_team,
+     vertex.color = V(john_team)$clique_color,
+     vertex.label = V(john_team)$label,
+     edge.width = E(john_team)$edge_width,
+     edge.color = E(john_team)$edge_color,
+     layout = layout_with_fr(john_team),
+     #vertex.size = eigen_centrality(john_team, directed = FALSE)$vector*10,
+     vertex.size = 12,
+     # label distance = .5 if team leaders, if not then label distance = .5
+     vertex.label.dist = 0,
+     vertex.label.color = c("black"),
+     vertex.label.font= 1, # 2 is bold
+     edge.curved=.1,
+     alpha.f = .5,
+     main="John A's Faction (Largest Clique)"
+)
+legend("bottomright", legend = c(legend_title, legend_labels), col = c("black", legend_colors), pch = 15, bty = "n")
+par(mfrow=c(1,2), mar=c(0.5,0.5,0.5,0.5)) # reset the graph params
+
+```
+The plots above - Mr Hi's faction (Largest clique) and John A's faction (Largest clique) - are subsetted network graph representing two factions. The vertices in red color represent vertices that form the largest clique in the subsetted network. Cliques in a network are subset of vertices in a network such that each vertex in the clique are linked to all of the other vertices in the clique. In Mr Hi's network actor 2, actor 3, actor 4, actor 8 and mr hi's node form a clique. There are 5 members in the network that form the largest clique in mr hi's faction. In John A's faction network, four vertices representing John A, actor 24, actor 30, and actor 33 represent a clique. 
+
+Another visual layer that is also added in this plot above to show the strength of relationships between each vertices based on edge attribute weight. Edge attribute weight represents the number of common activities the club members  ( Actors )took part in. Edges that are represented as green are edges that have edge attribute weight greater or equal to the mean of edge attribute weight in the full network. Form the plots above, we can see that both networks have similar number of strong and weak edges based on the cutoff of mean value of edge attribute edge of the full network.
+
+
+
+
+```{r}
+# Assuming you have a graph object named "karate_data" and the variable "all_paths" containing the paths
+# Assuming you have a graph object named "karate_data" and the variable "all_paths" containing the paths
+
+# Plot the graph
+#path a
+new_karate_data <- karate_data
+new_bet_mes <- betweenness(new_karate_data, directed = FALSE)
+new_clo_mes <- closeness(new_karate_data, mode = "all")
+new_deg_mes <- degree(new_karate_data, mode = "all")
+new_esize<- eigen_centrality(new_karate_data, directed = FALSE)
+V(new_karate_data)$shape <- ifelse(V(new_karate_data)$name == "John A", "square" ,
+                          ifelse(V(new_karate_data)$name=="Mr Hi", "square" , "circle"))
+
+
+
+paths_to_hi <- all_simple_paths(new_karate_data, from = V(new_karate_data)[V(new_karate_data)$name == "Actor 9"],
+                              to = V(new_karate_data)[V(new_karate_data)$name == "Mr Hi"], cutoff = 2)
+
+#path 2
+paths_to_A <- all_simple_paths(new_karate_data, from = V(new_karate_data)[V(new_karate_data)$name == "Actor 9"],
+                              to = V(new_karate_data)[V(new_karate_data)$name == "John A"], cutoff = 2)
+
+E(new_karate_data)$new_edge_width <- 1
+
+
+for (path in paths_to_hi) {
+  for (i in 1:(length(path) - 1)) {
+    source <- path[i]
+    target <- path[i + 1]
+    edge <- get.edge.ids(new_karate_data, c(source, target), directed = FALSE)
+    E(new_karate_data)[edge]$color <- "orange"
+    E(new_karate_data)[edge]$new_edge_width <- E(new_karate_data)[edge]$weight
+  }
+}
+
+for (path in paths_to_A) {
+  for (i in 1:(length(path) - 1)) {
+    source <- path[i]
+    target <- path[i + 1]
+    edge <- get.edge.ids(new_karate_data, c(source, target), directed = FALSE)
+    E(new_karate_data)[edge]$color <- "skyblue"
+    E(new_karate_data)[edge]$new_edge_width <- E(new_karate_data)[edge]$weight
+
+
+  }
+}
+
+
+vertices_to_delete <- setdiff(V(new_karate_data)$name,
+                              c("Actor 33","Actor 31", "Actor 9", "Actor 3",
+                                "Mr Hi", "John A"))
+
+g <- delete_vertices(new_karate_data, vertices_to_delete)
+
+
+#set.seed(40)
+
+par(mfrow=c(1,2), mar=c(1,1,1,1))
+set.seed(40)
+plot(new_karate_data,
+     vertex.label = V(new_karate_data)$label,
+     edge.width = E(new_karate_data)$new_edge_width*1.5,
+     edge.label = ifelse(E(new_karate_data)$new_edge_width == 1, '', E(new_karate_data)$new_edge_width),
+     edge.label.cex = 1,
+     edge.label.font = 2,
+     layout = layout_with_fr(new_karate_data),
+     #vertex.size = new_esize$vector*10, #new_deg_mes/2,
+     vertex.size = new_esize$vector*15, #new_deg_mes/2,
+
+     vertex.label.dist = ifelse(V(new_karate_data)$name == "John A", 0,
+                                ifelse(V(new_karate_data)$name == "Mr Hi", 0, 0.5)),
+     vertex.shape = ifelse(V(new_karate_data)$name == "John A", "square",
+                           ifelse(V(new_karate_data)$name == "Mr Hi", "square", "circle")),
+     vertex.label.color = "black",
+     vertex.label.font = 1,
+     edge.curved = 0.1,
+     main = "Paths from Actor 9 to Mr Hi. & John A"
+)
+set.seed(40)
+plot(g,
+     vertex.label = V(g)$label,
+     edge.width = E(g)$new_edge_width*1.5,
+     edge.label = ifelse(E(g)$new_edge_width == 1, '', E(g)$new_edge_width),
+     edge.label.cex = 1,
+     edge.label.font = 2,
+     layout = layout_with_fr(g),
+     #vertex.size = new_esize$vector*10, #new_deg_mes/2,
+     vertex.size = 10, #new_deg_mes/2,
+
+     vertex.label.dist = ifelse(V(g)$name == "John A", 0,
+                                ifelse(V(g)$name == "Mr Hi", 0, 0)),
+     vertex.shape = ifelse(V(g)$name == "John A", "square",
+                           ifelse(V(g)$name == "Mr Hi", "square", "circle")),
+     vertex.label.color = "black",
+     vertex.label.font = 1,
+     edge.curved = 0.1,
+     main = "Paths from Actor 9 to Mr Hi. & John A"
+)
+# Iterate over each path and highlight the edges in red
+
+```
+In the plot above, i am trying to analyze all the paths between actor 9 and Mr Hi and Actor 9 and John A. Actor 9 belongs in John A's faction, but when the club split into two separate, Actor 9 was the only member of the club that did not choose the club based on their faction. Instead of joining John A's club whose faction Actor 9 belonged to , actor 9 choose Mr Hi's club. The plot on the left shows that full network with vertex sizes based on eigen vector centrality mesure. Blue vertices represent actors in John A's faction, and oranges vertices are actors in Mr Hi's faction. Non Gray edge colors represent paths from Actor 9 to either Mr Hi or John A. Edge labels are also added to non-gray edges to represent the edge attribute weight. Blue edges represent the all paths from Actor 9 to John A with cutoff of 2 steps, i.e all paths from Actor 9 to John A with either 1 or two steps. Similarly organge edges represent paths from actor 9 to mr Hi in one or two steps. The plot on the right is the subsetted graph that only shows the vertices that fall in the paths represented by non-gray edges ( paths from actor 9 to John A or Mr Hi in one or two steps). 
+
+We can see from the graph that actor 9 had most number of common activities in the club with Actor 3 who belongs to Mr Hi's faction. There are 3 paths relating Actor 9 to John A, but only two paths that lead Actor 9 to John A. Actor 9 also has four common activities with his faction leader John A and only 2 with Mr Hi ( faction leader of the opposing group). It is possible that Actor 3 might have played an important role in causing Actor 9 to join Mr Hi's group. 
+
+
+```{r}
+
+
+
+#path a
+new_1_karate_data <- karate_data
+
+
+V(new_1_karate_data)$clique_color <- V(new_1_karate_data)$color
+V(new_1_karate_data)$clique_color_2 <- V(new_1_karate_data)$color
+
+V(new_1_karate_data)$clique_color <- 8
+V(new_1_karate_data)$clique_color_2 <- 8
+
+#clique 1 
+V(new_1_karate_data)$clique_color[unlist(largest_cliques(new_1_karate_data)[1])] <- 6
+#clique 2
+V(new_1_karate_data)$clique_color_2[unlist(largest_cliques(new_1_karate_data)[2])] <- 6
+
+cut.off <- mean(E(new_1_karate_data)$weight)
+E(new_1_karate_data)$edge_color_1 <- ifelse(E(new_1_karate_data)$weight < cut.off , "gray", "green")
+E(new_1_karate_data)$edge_color_2 <- ifelse(E(new_1_karate_data)$weight < cut.off , "gray", "green")
+
+E(new_1_karate_data)$edge_width_1 <- ifelse(E(new_1_karate_data)$weight < cut.off , 1, 3)
+E(new_1_karate_data)$edge_width_2 <- ifelse(E(new_1_karate_data)$weight < cut.off , 1, 3)
+
+
+
+
+
+
+
+
+E(new_1_karate_data, path = largest_cliques(new_1_karate_data)[[1]] )$edge_color_1 <- "red"
+E(new_1_karate_data, path = largest_cliques(new_1_karate_data)[[2]] )$edge_color_2 <- "red"
+
+
+
+legend_colors <- c("gray", "green", "red")
+legend_labels <- c("< mean weight", ">= mean weight", ">= mean weight & clique path")
+legend_title <- "Edge Weight"
+
+
+
+
+par(mfrow=c(1,2), mar=c(1,1,1,1))
+set.seed(40)
+
+plot(new_1_karate_data,
+     vertex.label = V(new_1_karate_data)$label,
+     edge.width = E(new_1_karate_data)$edge_width_1, # E(new_1_karate_data)$weight,
+     layout = layout_with_fr(new_1_karate_data),
+     
+     
+     vertex.size = 10,
+     #vertex.size = new_esize$vector*10,
+     vertex.label.dist = ifelse(V(new_1_karate_data)$name == "John A", 0,
+                                ifelse(V(new_1_karate_data)$name == "Mr Hi", 0, 0)),
+     vertex.shape = ifelse(V(new_1_karate_data)$Faction == 1, "square", "circle"),
+     vertex.label.color = "black",
+     vertex.color = V(new_1_karate_data)$clique_color,
+     vertex.label.font = 1,
+     edge.curved = 0.1,
+     edge.color = E(new_1_karate_data)$edge_color_1,
+     main = "Cliques in the network"
+)
+legend("bottomright", legend = c(legend_title, legend_labels), col = c("black", legend_colors), pch = 15, bty = "n")
+set.seed(40)
+plot(new_1_karate_data,
+     vertex.label = V(new_1_karate_data)$label,
+     edge.width = E(new_1_karate_data)$edge_width_1, # E(new_1_karate_data)$weight,
+     layout = layout_with_fr(new_1_karate_data),
+     
+     vertex.size = 10,
+     #vertex.size = new_esize$vector*10,
+     vertex.label.dist = ifelse(V(new_1_karate_data)$name == "John A", 0,
+                                ifelse(V(new_1_karate_data)$name == "Mr Hi", 0, 0)),
+     vertex.shape = ifelse(V(new_1_karate_data)$Faction == 1, "square", "circle"),
+     vertex.label.color = "black",
+     vertex.color = V(new_1_karate_data)$clique_color_2,
+     vertex.label.font = 1,
+     edge.curved = 0.1,
+     edge.color = E(new_1_karate_data)$edge_color_2,
+     main = "Cliques in the Network"
+)
+legend("bottomright", legend = c(legend_title, legend_labels), col = c("black", legend_colors), pch = 15, bty = "n")
+
+```
+The two plots above represent two largest cliques in the full network. Edges in green or red color that have wider edges are edges that have weight attribute equal to or larger than the mean of the edge attribute in the full network. Red edges represent the paths that form a clique. 
+
+Two largest cliques both fall in the subgroup representing Mr Hi's faction. Vertices in Red color are the vertices that form cliques, gray vertices are vertices not part of the clique.
+
+
+```{r}
+
+g<-cluster_edge_betweenness(karate_data)
+dendPlot(g)
+
+
+plot(g,karate_data,
+     vertex.label=V(karate_data)$label) #using subset of name
+
+
+```
+In the plot above, I've used hierarchical clustering of the karate network data using edge betweenness algorithm and visualized the communities in the network detected by the algorithm. 
+The algorithm has detected 6 distinct communities in the network of karate data. 
+
+
+```{r }
+
+x<-network_stat %>% dplyr::filter(!is.na(network_stat$actor)) %>%  group_by(faction) %>% 
+  summarise(cc=mean(closeness),dd=mean(degree), bb = mean(betweenness), ee = mean(eigen_centrality))
+par(mfrow=c(2,2))
+
+plot1 <- ggplot(x, aes(reorder(faction, cc),cc)) + 
+  geom_bar(stat="summary",fill="cornflowerblue",alpha=.5) +
+  geom_text(aes(label = round(cc,4)), vjust = -0.5, color = "black", size = 4) +
+  ggtitle("Mean `closeness` by Faction (John A vs Mr Hi)")+
+  theme_minimal()+xlab("Faction")+ylab("Closeness")+
+  theme(axis.text.x = element_text(angle = 0, size = 12),
+        axis.text.y = element_text(size = 12),
+        axis.title.x = element_text(size = 14),
+        axis.title.y = element_text(size = 14)
+        )
+
+plot2 <- ggplot(x, aes(reorder(faction, bb),bb)) + 
+  geom_bar(stat="summary",fill="cornflowerblue",alpha=.5) +
+  geom_text(aes(label = round(bb,2)), vjust = -0.5, color = "black", size = 4) +
+  ggtitle("Mean `betweenness` by Faction (John A vs Mr Hi)")+
+  theme_minimal()+xlab("Faction")+ylab("Betweenness")+
+  theme(axis.text.x = element_text(angle = 0, size = 12),
+        axis.text.y = element_text(size = 12),
+        axis.title.x = element_text(size = 14),
+        axis.title.y = element_text(size = 14)
+  )
+
+
+plot3 <- ggplot(x, aes(reorder(faction, dd),dd)) + 
+  geom_bar(stat="summary",fill="cornflowerblue",alpha=.5) +
+  geom_text(aes(label = round(dd,2)), vjust = -0.5, color = "black", size = 4) +
+  ggtitle("Mean `degree` by Faction (John A vs Mr Hi)")+
+  theme_minimal()+xlab("Faction")+ylab("Degree")+
+  theme(axis.text.x = element_text(angle = 0, size = 12),
+        axis.text.y = element_text(size = 12),
+        axis.title.x = element_text(size = 14),
+        axis.title.y = element_text(size = 14)
+  )
+
+
+plot4 <- ggplot(x, aes(reorder(faction, ee),ee)) + 
+  geom_bar(stat="summary",fill="cornflowerblue",alpha=.5) +
+  geom_text(aes(label = round(ee,2)), vjust = -0.5, color = "black", size = 4) +
+  ggtitle("Mean `eigen centrality` by Faction (John A vs Mr Hi)")+
+  theme_minimal()+xlab("Faction")+ylab("Eigen centrality")+
+  theme(axis.text.x = element_text(angle = 0, size = 12),
+        axis.text.y = element_text(size = 12),
+        axis.title.x = element_text(size = 14),
+        axis.title.y = element_text(size = 14)
+  )
+grid.arrange(plot1,plot2,plot3,plot4, ncol = 2, nrow = 2)
+
+```
+The barplots above show network stats for John A's faction and Mr Hi's faction. In terms of centrality measures, seems like Mr Hi's faction on average has a better centrality measure than John A's faction except for closeness centrality measure. Low value of closeness in Mr Hi's faction suggests that in this subsetted graph of Mr Hi's faction, nodes in this subset are relatively more isolated than the nodes in subsetted graph of John A's faction. 
+
+# References
+
+Wayne W. Zachary. An Information Flow Model for Conflict and Fission in Small Groups. Journal of Anthropological Research Vol. 33, No. 4 452-473
+
+CRAN (2023, June 22). Package ‘igraphdata’. Retrieved May 5, 2023, from https://cran.r-project.org/web/packages/igraphdata/igraphdata.pdf
+
